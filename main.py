@@ -391,8 +391,12 @@ class StarRailAutoPlugin(Star):
             ssh.close()
 
             if exit_code != 0:
-                err = stderr.read().decode("utf-8", errors="ignore")[:300]
-                info_log(f"⚠️ 创建任务异常: {err}")
+                err = stderr.read().decode("utf-8", errors="ignore")[:500]
+                info_log(f"❌ 计划任务创建失败 (exit={exit_code}): {err}")
+                info_log("💡 可能原因：用户名/密码错误、权限不足、三月七路径不存在")
+                if event:
+                    yield event.plain_result("❌ 计划任务创建失败，请检查配置\n> " + str(err[:200]))
+                return
 
             # 6. 轮询等待完成
             info_log("⏳ 等待任务完成...")
