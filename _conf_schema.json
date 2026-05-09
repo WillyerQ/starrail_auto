@@ -29,6 +29,12 @@
     "type": "string",
     "default": "root"
   },
+  "nas_ssh_password": {
+    "description": "NAS SSH 密码（WOL方式为ssh时需要）",
+    "type": "string",
+    "default": "",
+    "hint": "如果 NAS 配置了 SSH 密钥登录则可不填"
+  },
   "nas_ssh_host": {
     "description": "NAS SSH 地址（WOL方式为ssh时需要）",
     "type": "string",
