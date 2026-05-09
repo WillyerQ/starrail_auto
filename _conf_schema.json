@@ -20,9 +20,9 @@
   "wol_method": {
     "description": "WOL 唤醒方式",
     "type": "string",
-    "default": "udp",
+    "default": "ssh",
     "options": ["udp", "ssh"],
-    "hint": "udp=容器网络直发（需host模式）；ssh=通过宿主机SSH发（适合Docker bridge网络）"
+    "hint": "ssh=通过NAS/宿主机SSH转发(推荐，跨子网)；udp=容器内直发(仅同子网有效)"
   },
   "nas_ssh_user": {
     "description": "NAS SSH 用户名（WOL方式为ssh时需要）",
