@@ -245,7 +245,10 @@ class StarRailAutoPlugin(Star):
         # 1. WOL 唤醒
         if event: info_log("📡 发送 WOL 唤醒信号...")
         broadcast_ip = self._get_config("broadcast_ip", "192.168.1.255")
-        await self._send_wol(pc_mac, broadcast_ip)
+        wol_method = self._get_config("wol_method", "udp")
+        nas_user = self._get_config("nas_ssh_user", "root")
+        nas_port = self._get_config("nas_ssh_port", 22)
+        await self._send_wol(pc_mac, broadcast_ip, wol_method, nas_user, nas_port)
         await asyncio.sleep(45)
 
         # 2. SSH 连接
@@ -435,11 +438,30 @@ class StarRailAutoPlugin(Star):
             return default
 
     @staticmethod
-    async def _send_wol(mac: str, broadcast_ip: str = "192.168.1.255"):
+    async def _send_wol(mac: str, broadcast_ip: str = "192.168.1.255",
+                        method: str = "udp", nas_user: str = "root",
+                        nas_port: int = 22):
+        """发送 WOL 魔术包，支持 udp 直发和 ssh 宿主机转发"""
         mac_clean = mac.replace(":", "").replace("-", "").replace(" ", "")
         if len(mac_clean) != 12:
             error_log(f"无效 MAC: {mac}")
             return
+
+        if method == "ssh":
+            cmd = f"etherwake -i br0 {mac_clean} 2>/dev/null || etherwake {mac_clean}"
+            try:
+                ssh = paramiko.SSHClient()
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect("127.0.0.1", port=nas_port, username=nas_user, timeout=5)
+                _, out, _ = ssh.exec_command(f"which etherwake && {cmd}", timeout=10)
+                result = out.read().decode().strip()
+                ssh.close()
+                info_log(f"SSH WOL 已发送至 {mac}: {result}")
+            except Exception as e:
+                error_log(f"SSH WOL 失败: {e}，请确认宿主机已安装 etherwake")
+            return
+
+        # UDP 直发
         magic = bytes.fromhex("FF" * 6 + mac_clean * 16)
         try:
             import socket
@@ -449,9 +471,9 @@ class StarRailAutoPlugin(Star):
             s.sendto(magic, (broadcast_ip, 9))
             s.sendto(magic, (broadcast_ip, 7))
             s.close()
-            info_log(f"WOL 已发送至 {mac}")
+            info_log(f"UDP WOL 已发送至 {mac} -> {broadcast_ip}")
         except Exception as e:
-            error_log(f"WOL 失败: {e}")
+            error_log(f"UDP WOL 失败: {e}")
 
     def _get_help_text(self) -> str:
         return ("📋 **崩铁体力自动化 - 指令列表**\n\n"

@@ -17,6 +17,23 @@
     "default": "192.168.1.255",
     "hint": "根据你的局域网网段填写。小米路由器默认 192.168.31.255，一般路由器 192.168.1.255"
   },
+  "wol_method": {
+    "description": "WOL 唤醒方式",
+    "type": "string",
+    "default": "udp",
+    "options": ["udp", "ssh"],
+    "hint": "udp=容器网络直发（需host模式）；ssh=通过宿主机SSH发（适合Docker bridge网络）"
+  },
+  "nas_ssh_user": {
+    "description": "NAS SSH 用户名（WOL方式为ssh时需要）",
+    "type": "string",
+    "default": "root"
+  },
+  "nas_ssh_port": {
+    "description": "NAS SSH 端口（WOL方式为ssh时需要）",
+    "type": "int",
+    "default": 22
+  },
   "pc_username": {
     "description": "Windows 登录用户名",
     "type": "string",
