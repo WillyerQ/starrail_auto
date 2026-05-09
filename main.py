@@ -580,7 +580,7 @@ class StarRailAutoPlugin(Star):
         # 1. 本地 JSON 文件（/体力配置 命令写入的）优先
         try:
             local = self._load_local_config()
-            if key in local:
+            if key in local and local[key] not in (None, "", [], {}):
                 return local[key]
         except Exception:
             pass
