@@ -502,17 +502,26 @@ class StarRailAutoPlugin(Star):
     def _get_config(self, key: str, default=None):
         """获取配置：优先从本地 JSON，其次从 WebUI 配置"""
         # 1. 本地 JSON 文件（/体力配置 命令写入的）优先
-        local = self._load_local_config()
-        if key in local:
-            return local[key]
-        # 2. WebUI 配置（通过 _conf_schema.json 在插件管理页面填写）
-        if hasattr(self, "plugin_config") and key in self.plugin_config:
-            return self.plugin_config[key]
-        # 3. 安全兜底：从全局 AstrBotConfig 查找
+        try:
+            local = self._load_local_config()
+            if key in local:
+                return local[key]
+        except Exception:
+            pass
+        # 2. WebUI 插件配置页面填写
+        try:
+            if hasattr(self, "plugin_config"):
+                val = self.plugin_config.get(key)
+                if val is not None:
+                    return val
+        except Exception:
+            pass
+        # 3. 从 AstrBot 全局配置兜底
         try:
             conf = self.context.get_config()
-            if conf and key in conf:
-                return conf[key]
+            val = conf.get(key) if hasattr(conf, "get") else None
+            if val is not None and not hasattr(val, "get"):
+                return val
         except Exception:
             pass
         return default
