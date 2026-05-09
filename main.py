@@ -280,7 +280,13 @@ class StarRailAutoPlugin(Star):
 
         # 1. WOL 唤醒
         if event: info_log("📡 发送 WOL 唤醒信号...")
-        broadcast_ip = self._get_config("broadcast_ip", "192.168.1.255")
+        broadcast_ip = self._get_config("broadcast_ip", "")
+        if not broadcast_ip and pc_ip:
+            parts = pc_ip.rsplit(".", 1)
+            if len(parts) == 2:
+                broadcast_ip = f"{parts[0]}.255"
+        if not broadcast_ip:
+            broadcast_ip = "192.168.1.255"
         wol_method = self._get_config("wol_method", "udp")
         nas_user = self._get_config("nas_ssh_user", "root")
         nas_host = self._get_config("nas_ssh_host", "127.0.0.1")
@@ -580,7 +586,7 @@ class StarRailAutoPlugin(Star):
             s.sendto(magic, (broadcast_ip, 9))
             s.sendto(magic, (broadcast_ip, 7))
             s.close()
-            info_log(f"UDP WOL 已发送至 {mac} -> {broadcast_ip}")
+            info_log(f"UDP WOL 已发送至 {mac} -> {broadcast_ip}:9/7")
         except Exception as e:
             error_log(f"UDP WOL 失败: {e}")
 
