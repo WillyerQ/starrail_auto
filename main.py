@@ -288,8 +288,7 @@ class StarRailAutoPlugin(Star):
                     f'"{march7th_dir}\\*.log" 2^>nul\') do @echo %f && exit /b'
                 )
                 _, out, _ = ls.exec_command(find_cmd, timeout=10)
-                latest_log = out.read().decode("utf-8", errors="ignore").strip().split("
-")[0].strip()
+                latest_log = out.read().decode("utf-8", errors="ignore").strip().split(chr(10))[0].strip()
 
                 if latest_log and latest_log.endswith((".log", ".txt")):
                     log_path = f"{march7th_dir}\\logs\\{latest_log}" if "\\" not in latest_log else latest_log
@@ -297,8 +296,7 @@ class StarRailAutoPlugin(Star):
                     log_content = log_out.read().decode("utf-8", errors="ignore")
                     log_stderr = log_err.read().decode("utf-8", errors="ignore")
                     if log_stderr:
-                        log_content += "
-" + log_stderr
+                        log_content += "\n" + log_stderr
                 ls.close()
             except Exception:
                 pass
@@ -307,25 +305,13 @@ class StarRailAutoPlugin(Star):
             if task_done:
                 yield event.plain_result("✅ 三月七助手任务已完成！")
             else:
-                error_md = "## ❌ 三月七助手执行异常
-
-"
-                error_md += "**状态：** 任务超时或未正常完成
-
-"
+                error_md = "## ❌ 三月七助手执行异常\n\n"
+                error_md += "**状态：** 任务超时或未正常完成\n\n"
                 if log_content:
-                    error_md += "**错误日志：**
-
-```
-" + log_content[-2000:] + "
-```
-"
+                    error_md += "**错误日志：**\n\n```\n" + log_content[-2000:] + "\n```\n"
                 else:
-                    error_md += "**错误日志：** 未找到日志文件
-"
-                error_md += "
----
-*由 starrail-auto 插件自动报告*"
+                    error_md += "**错误日志：** 未找到日志文件\n"
+                error_md += "\n---\n*由 starrail-auto 插件自动报告*"
 
                 yield event.plain_result("⏰ 任务可能异常，正在发送报错日志...")
                 yield event.plain_result(error_md)
@@ -349,28 +335,13 @@ class StarRailAutoPlugin(Star):
             # 发送详细报错
             import traceback
             tb = traceback.format_exc()
-            error_md = "## ❌ 插件执行崩溃
-
-"
-            error_md += f"**异常类型：** `{type(e).__name__}`
-
-"
-            error_md += "**错误信息：**
-```
-" + str(e) + "
-```
-
-"
-            error_md += "**调用栈：**
-```
-" + tb[-1500:] + "
-```
-"
-            error_md += "
----
-*由 starrail-auto 插件自动报告*"
+            error_md = "## ❌ 插件执行崩溃\n\n"
+            error_md += f"**异常类型：** `{type(e).__name__}`\n\n"
+            error_md += "**错误信息：**\n```\n" + str(e) + "\n```\n\n"
+            error_md += "**调用栈：**\n```\n" + tb[-1500:] + "\n```\n"
+            error_md += "\n---\n*由 starrail-auto 插件自动报告*"
             yield event.plain_result(error_md)
-            logger.error(f"插件执行崩溃: {e}
+            logger.error(f"插件执行崩溃: {e}\
 {tb}")
 
     # ========== 定时任务 ==========
@@ -420,57 +391,40 @@ class StarRailAutoPlugin(Star):
             logger.error(f"WOL 失败: {e}")
 
     def _get_help_text(self) -> str:
-        return (
-            "📋 **崩铁体力自动化 - 指令列表**
-
-"
-            "/体力设置 <数值>  - 设置当前体力并计算触发时间
-"
-            "/体力状态         - 查看体力记录和下次触发时间
-"
-            "/清体力           - 手动唤醒电脑执行清体力任务
-"
-            "/体力重置         - 清除所有体力数据重新开始
-"
-            "/体力帮助         - 显示本帮助
-
-"
-            "💡 也可以对我说「跑崩铁」「清体力啦」来触发"
-        )
+        return ("📋 **崩铁体力自动化 - 指令列表**\n\n"
+                "/体力设置 <数值>  - 设置当前体力并计算触发时间\n"
+                "/体力状态         - 查看体力记录和下次触发时间\n"
+                "/清体力           - 手动唤醒电脑执行清体力任务\n"
+                "/体力重置         - 清除所有体力数据重新开始\n"
+                "/体力帮助         - 显示本帮助\n\n"
+                "💡 也可以对我说「跑崩铁」「清体力啦」来触发")
 
     async def _generate_help_image(self) -> Optional[str]:
         """生成帮助图片，支持自定义背景"""
         try:
-            # 插件目录路径
             plugin_dir = os.path.dirname(os.path.abspath(__file__))
             bg_dir = os.path.join(plugin_dir, "backgrounds")
 
-            # 找中文字体
             font_path = None
             for fp in [
                 "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
                 "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
-                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
             ]:
                 if os.path.exists(fp):
                     font_path = fp
                     break
             if not font_path:
                 import subprocess
-                r = subprocess.run(["fc-list", ":lang=zh", "-f", "%{file}
-"],
+                r = subprocess.run(["fc-list", ":lang=zh", "-f", "%{file}\n"],
                                    capture_output=True, text=True, timeout=5)
-                fonts = [f.strip() for f in r.stdout.strip().split("
-") if f.strip()]
+                fonts = [f.strip() for f in r.stdout.strip().split("\n") if f.strip()]
                 if fonts:
                     font_path = fonts[0]
-
             if not font_path:
                 return None
 
-            # 检查背景目录是否有图片
             bg_image = None
             if os.path.isdir(bg_dir):
                 for f in sorted(os.listdir(bg_dir)):
@@ -479,7 +433,6 @@ class StarRailAutoPlugin(Star):
                         break
 
             W, H = 600, 420
-
             if bg_image:
                 bg = Image.open(bg_image).convert("RGB")
                 bg = bg.resize((W, H), Image.LANCZOS)
@@ -493,7 +446,6 @@ class StarRailAutoPlugin(Star):
             cf = ImageFont.truetype(font_path, 18)
             nf = ImageFont.truetype(font_path, 14)
 
-            # 半透明遮罩（背景图时用）
             if bg_image:
                 overlay = Image.new("RGBA", (W, H), (0, 0, 0, 140))
                 img.paste(overlay, (0, 0), overlay)
