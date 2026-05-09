@@ -91,7 +91,7 @@ class StarRailAutoPlugin(Star):
         stamina_needed = threshold - stamina
         if stamina_needed <= 0:
             yield event.plain_result(f"当前体力 {stamina}，已达到阈值 {threshold}，立即触发清体力！")
-            for result in self._execute_cleanup(event):
+            async for result in self._execute_cleanup(event):
                 yield result
             return
         wait_minutes = stamina_needed * 6
@@ -108,7 +108,7 @@ class StarRailAutoPlugin(Star):
     async def handle_cleanup(self, event: AstrMessageEvent):
         """手动触发清体力"""
         yield event.plain_result("正在执行清体力任务...")
-        for result in self._execute_cleanup(event):
+        async for result in self._execute_cleanup(event):
             yield result
 
     @filter.command("体力重置")
@@ -138,7 +138,7 @@ class StarRailAutoPlugin(Star):
                 yield event.plain_result("还没设置体力，请先告诉体力值（或 /体力设置 <数值>）")
             else:
                 yield event.plain_result(f"当前体力 {self.current_stamina}，正在执行...")
-                for result in self._execute_cleanup(event):
+                async for result in self._execute_cleanup(event):
                     yield result
 
     # ========== 体力设置逻辑 ==========
@@ -167,7 +167,7 @@ class StarRailAutoPlugin(Star):
 
         if stamina_needed <= 0:
             yield event.plain_result(f"当前体力 {stamina}，已达到阈值 {threshold}，立即触发清体力！")
-            for result in self._execute_cleanup(event):
+            async for result in self._execute_cleanup(event):
                 yield result
             return
 
