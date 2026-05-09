@@ -34,6 +34,7 @@
 |--------|------|------|------|
 | PC_IP | string | ✅ | 目标电脑内网IP |
 | PC_MAC | string | ✅ | MAC地址（WOL用） |
+| BROADCAST_IP | string | ❌ | WOL广播地址，默认192.168.1.255。根据你局域网网段填，如小米路由用192.168.31.255 |
 | PC_USERNAME | string | ✅ | Windows登录用户名 |
 | PC_PASSWORD | string | ✅ | Windows登录密码 |
 | MARCH7TH_PATH | string | ✅ | 三月七助手exe完整路径 |
