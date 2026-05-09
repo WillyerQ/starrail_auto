@@ -364,9 +364,9 @@ class StarRailAutoPlugin(Star):
             selected_tasks = self._get_config("selected_tasks", ["main"])
             if isinstance(selected_tasks, list) and len(selected_tasks) > 0:
                 task_args = " ".join(selected_tasks)
-                task_cmd = f'"{march7th_path}" {task_args} --exit'
+                task_cmd = f'{march7th_path} {task_args} --exit'
             else:
-                task_cmd = f'"{march7th_path}" main --exit'
+                task_cmd = f'{march7th_path} main --exit'
 
             if event:
                 task_names = {
@@ -390,7 +390,7 @@ class StarRailAutoPlugin(Star):
 
             # 创建新任务
             stdin, stdout, stderr = ssh.exec_command(
-                f'schtasks /create /tn "{schtasks_name}" /tr {task_cmd} '
+                f'schtasks /create /tn "{schtasks_name}" /tr "{task_cmd}" '
                 f'/sc once /st 00:00 /ru "{safe_username}" /rp "{safe_password}" /rl HIGHEST /f',
                 timeout=20
             )
