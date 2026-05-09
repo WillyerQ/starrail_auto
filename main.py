@@ -152,13 +152,20 @@ class StarRailAutoPlugin(Star):
     # ========== 执行清体力（WOL + SSH + 计划任务） ==========
 
     async def _execute_cleanup(self, event: Optional[AstrMessageEvent] = None):
-        """执行清体力任务：WOL 唤醒 → SSH 通过计划任务执行三月七（无需自动登录）"""
+        """执行清体力任务：WOL → SSH → 更新检查 → 跑任务 → 报错日志"""
         pc_ip = self._get_config("pc_ip", "")
         pc_mac = self._get_config("pc_mac", "")
         pc_username = self._get_config("pc_username", "")
         pc_password = self._get_config("pc_password", "")
         march7th_path = self._get_config("march7th_path", "")
         ssh_port = self._get_config("ssh_port", 22)
+
+        admin_id = None
+        if event:
+            try:
+                admin_id = event.get_sender_id()
+            except Exception:
+                admin_id = None
 
         if not pc_mac or not pc_ip:
             msg = "⚠️ 未配置电脑信息，请在 WebUI 中填写 PC_IP 和 PC_MAC"
@@ -169,8 +176,6 @@ class StarRailAutoPlugin(Star):
         # 1. WOL 唤醒
         if event: yield event.plain_result("📡 发送 WOL 唤醒信号...")
         await self._send_wol(pc_mac, pc_ip)
-
-        # 等待开机（给足时间，登录界面也能 SSH）
         await asyncio.sleep(45)
 
         # 2. SSH 连接
@@ -181,7 +186,24 @@ class StarRailAutoPlugin(Star):
             ssh.connect(hostname=pc_ip, port=ssh_port,
                         username=pc_username, password=pc_password, timeout=20)
 
-            # 构建任务命令
+            # 解析三月七目录和更新器路径
+            march7th_dir = march7th_path.rsplit("\\", 1)[0] if "\\" in march7th_path else march7th_path.rsplit("/", 1)[0]
+            updater_path = march7th_dir + "\\March7th Updater.exe"
+
+            # 3. 先检查并运行更新
+            if event: yield event.plain_result("🔄 检查三月七助手更新...")
+            stdin, stdout, stderr = ssh.exec_command(
+                f'if exist "{updater_path}" ("{updater_path}" 2>&1) else (echo UPDATER_NOT_FOUND)',
+                timeout=120
+            )
+            update_output = stdout.read().decode("utf-8", errors="ignore") + stderr.read().decode("utf-8", errors="ignore")
+
+            if "UPDATER_NOT_FOUND" in update_output:
+                if event: yield event.plain_result("⚠️ 未找到更新程序，跳过更新")
+            else:
+                if event: yield event.plain_result("✅ 更新检查完成")
+
+            # 4. 构建任务命令
             selected_tasks = self._get_config("selected_tasks", ["main"])
             if isinstance(selected_tasks, list) and len(selected_tasks) > 0:
                 task_args = " ".join(selected_tasks)
@@ -198,7 +220,7 @@ class StarRailAutoPlugin(Star):
                 labels = [task_names.get(t, t) for t in (selected_tasks if isinstance(selected_tasks, list) else ["main"])]
                 yield event.plain_result(f"⚙️ 即将执行：{' → '.join(labels)}")
 
-            # 通过计划任务以指定用户身份运行（可在登录界面/锁屏状态下执行）
+            # 5. 通过计划任务运行
             schtasks_name = "StarRailAutoTemp"
             cmds = [
                 f'schtasks /delete /tn "{schtasks_name}" /f 2>nul',
@@ -209,13 +231,11 @@ class StarRailAutoPlugin(Star):
             exit_code = stdout.channel.recv_exit_status()
             ssh.close()
 
-            if exit_code == 0:
-                yield event.plain_result("✅ 计划任务已触发，三月七助手正在运行...")
-            else:
+            if exit_code != 0:
                 err = stderr.read().decode("utf-8", errors="ignore")[:300]
-                yield event.plain_result(f"⚠️ 创建任务可能异常: {err}")
+                yield event.plain_result(f"⚠️ 创建任务异常: {err}")
 
-            # 3. 轮询等待完成
+            # 6. 轮询等待完成
             yield event.plain_result("⏳ 等待任务完成...")
             task_done = False
             for _ in range(30):
@@ -225,7 +245,8 @@ class StarRailAutoPlugin(Star):
                     cs.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                     cs.connect(hostname=pc_ip, port=ssh_port,
                                username=pc_username, password=pc_password, timeout=10)
-                    _, out, _ = cs.exec_command(f'schtasks /query /tn "{schtasks_name}" /fo LIST | find "状态:"', timeout=10)
+                    _, out, _ = cs.exec_command(
+                        f'schtasks /query /tn "{schtasks_name}" /fo LIST | find "状态:"', timeout=10)
                     if "准备就绪" in out.read().decode("utf-8", errors="ignore"):
                         task_done = True
                     cs.close()
@@ -234,7 +255,7 @@ class StarRailAutoPlugin(Star):
                 except Exception:
                     pass
 
-            # 清理计划任务
+            # 7. 清理计划任务
             try:
                 cs2 = paramiko.SSHClient()
                 cs2.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -245,12 +266,62 @@ class StarRailAutoPlugin(Star):
             except Exception:
                 pass
 
+            # 8. 拉取日志
+            log_content = ""
+            try:
+                ls = paramiko.SSHClient()
+                ls.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ls.connect(hostname=pc_ip, port=ssh_port,
+                           username=pc_username, password=pc_password, timeout=10)
+                # 查找最新日志文件
+                find_cmd = (
+                    f'for /f "delims=" %f in (\'dir /b /o-d "{march7th_dir}\\logs\\*.log" "{march7th_dir}\\logs\\*.txt" '
+                    f'"{march7th_dir}\\*.log" 2^>nul\') do @echo %f && exit /b'
+                )
+                _, out, _ = ls.exec_command(find_cmd, timeout=10)
+                latest_log = out.read().decode("utf-8", errors="ignore").strip().split("
+")[0].strip()
+
+                if latest_log and latest_log.endswith((".log", ".txt")):
+                    log_path = f"{march7th_dir}\\logs\\{latest_log}" if "\\" not in latest_log else latest_log
+                    _, log_out, log_err = ls.exec_command(f'type "{log_path}" 2>nul', timeout=10)
+                    log_content = log_out.read().decode("utf-8", errors="ignore")
+                    log_stderr = log_err.read().decode("utf-8", errors="ignore")
+                    if log_stderr:
+                        log_content += "
+" + log_stderr
+                ls.close()
+            except Exception:
+                pass
+
+            # 9. 结果
             if task_done:
                 yield event.plain_result("✅ 三月七助手任务已完成！")
             else:
-                yield event.plain_result("⏰ 任务可能仍在运行，请稍后手动检查")
+                error_md = "## ❌ 三月七助手执行异常
 
-            # 4. 自动关机
+"
+                error_md += "**状态：** 任务超时或未正常完成
+
+"
+                if log_content:
+                    error_md += "**错误日志：**
+
+```
+" + log_content[-2000:] + "
+```
+"
+                else:
+                    error_md += "**错误日志：** 未找到日志文件
+"
+                error_md += "
+---
+*由 starrail-auto 插件自动报告*"
+
+                yield event.plain_result("⏰ 任务可能异常，正在发送报错日志...")
+                yield event.plain_result(error_md)
+
+            # 10. 自动关机
             if self._get_config("auto_shutdown", True):
                 yield event.plain_result("🔌 电脑即将关机")
                 try:
@@ -264,9 +335,34 @@ class StarRailAutoPlugin(Star):
                     pass
 
         except Exception as e:
-            err = f"❌ 操作失败：{str(e)}"
-            if event: yield event.plain_result(err)
-            logger.error(err)
+            err_msg = f"❌ 操作失败：{str(e)}"
+            if event: yield event.plain_result(err_msg)
+            # 发送详细报错
+            import traceback
+            tb = traceback.format_exc()
+            error_md = "## ❌ 插件执行崩溃
+
+"
+            error_md += f"**异常类型：** `{type(e).__name__}`
+
+"
+            error_md += "**错误信息：**
+```
+" + str(e) + "
+```
+
+"
+            error_md += "**调用栈：**
+```
+" + tb[-1500:] + "
+```
+"
+            error_md += "
+---
+*由 starrail-auto 插件自动报告*"
+            yield event.plain_result(error_md)
+            logger.error(f"插件执行崩溃: {e}
+{tb}")
 
     # ========== 定时任务 ==========
 
