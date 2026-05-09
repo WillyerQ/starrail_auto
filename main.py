@@ -381,22 +381,44 @@ class StarRailAutoPlugin(Star):
             schtasks_name = "StarRailAutoTemp"
             safe_password = self._escape_win_cmd_arg(pc_password)
             safe_username = self._escape_win_cmd_arg(pc_username)
-            cmds = [
+
+            # 先清理旧任务（失败也无所谓）
+            ssh.exec_command(
                 f'schtasks /delete /tn "{schtasks_name}" /f 2>nul',
-                f'schtasks /create /tn "{schtasks_name}" /tr "{task_cmd}" /sc once /st 00:00 /ru "{safe_username}" /rp "{safe_password}" /rl HIGHEST /f',
-                f'schtasks /run /tn "{schtasks_name}"',
-            ]
-            stdin, stdout, stderr = ssh.exec_command(" && ".join(cmds), timeout=20)
-            exit_code = stdout.channel.recv_exit_status()
+                timeout=10
+            )
+
+            # 创建新任务
+            stdin, stdout, stderr = ssh.exec_command(
+                f'schtasks /create /tn "{schtasks_name}" /tr "{task_cmd}" '
+                f'/sc once /st 00:00 /ru "{safe_username}" /rp "{safe_password}" /rl HIGHEST /f',
+                timeout=20
+            )
+            create_ok = stdout.channel.recv_exit_status()
+            stderr_text = stderr.read().decode("utf-8", errors="ignore")[:500]
+
+            if create_ok != 0:
+                info_log(f"❌ 计划任务创建失败 (exit={create_ok}): {stderr_text}")
+                info_log("💡 可能原因：用户名/密码错误, 权限不足, 三月七路径不存在")
+                ssh.close()
+                if event:
+                    yield event.plain_result(
+                        "❌ 计划任务创建失败, 请检查配置\n> " + str(stderr_text[:200])
+                    )
+                return
+
+            info_log("✅ 计划任务创建成功, 正在运行...")
+
+            # 运行任务
+            stdin, stdout, stderr = ssh.exec_command(
+                f'schtasks /run /tn "{schtasks_name}"', timeout=20
+            )
+            run_ok = stdout.channel.recv_exit_status()
             ssh.close()
 
-            if exit_code != 0:
-                err = stderr.read().decode("utf-8", errors="ignore")[:500]
-                info_log(f"❌ 计划任务创建失败 (exit={exit_code}): {err}")
-                info_log("💡 可能原因：用户名/密码错误、权限不足、三月七路径不存在")
-                if event:
-                    yield event.plain_result("❌ 计划任务创建失败，请检查配置\n> " + str(err[:200]))
-                return
+            if run_ok != 0:
+                err = stderr.read().decode("utf-8", errors="ignore")[:300]
+                info_log(f"⚠️ 计划任务运行异常: {err}")
 
             # 6. 轮询等待完成
             info_log("⏳ 等待任务完成...")
