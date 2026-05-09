@@ -554,13 +554,14 @@ class StarRailAutoPlugin(Star):
                         method: str = "udp", nas_user: str = "root",
                         nas_host: str = "127.0.0.1", nas_port: int = 22,
                         nas_password: str = ""):
-        """发送 WOL 魔术包，支持 udp 直发和 ssh 宿主机转发"""
+        """发送 WOL 唤醒信号，优先使用系统 etherwake / wakeonlan 工具"""
         mac_clean = mac.replace(":", "").replace("-", "").replace(" ", "")
         if len(mac_clean) != 12:
             error_log(f"无效 MAC: {mac}")
             return
 
         if method == "ssh":
+            # 通过 NAS 宿主机 SSH 转发 etherwake
             cmd = f"etherwake -i br0 {mac_clean} 2>/dev/null || etherwake {mac_clean}"
             try:
                 ssh = paramiko.SSHClient()
@@ -576,19 +577,48 @@ class StarRailAutoPlugin(Star):
                 error_log(f"SSH WOL 失败: {e}，请确认宿主机已安装 etherwake")
             return
 
-        # UDP 直发
-        magic = bytes.fromhex("FF" * 6 + mac_clean * 16)
-        try:
-            import socket
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            s.settimeout(2)
-            s.sendto(magic, (broadcast_ip, 9))
-            s.sendto(magic, (broadcast_ip, 7))
-            s.close()
-            info_log(f"UDP WOL 已发送至 {mac} -> {broadcast_ip}:9/7")
-        except Exception as e:
-            error_log(f"UDP WOL 失败: {e}")
+        # 直发模式：优先用系统 etherwake / wakeonlan 客户端工具
+        if method == "udp":
+            import shutil
+            etherwake_path = shutil.which("etherwake")
+            if etherwake_path:
+                import subprocess
+                try:
+                    subprocess.run(
+                        [etherwake_path, "-i", broadcast_ip, mac_clean],
+                        capture_output=True, timeout=5,
+                    )
+                    info_log(f"etherwake WOL 已发送至 {mac} -> {broadcast_ip}")
+                    return
+                except Exception as e:
+                    info_log(f"etherwake 执行失败，尝试 wakeonlan: {e}")
+
+            wakeonlan_path = shutil.which("wakeonlan")
+            if wakeonlan_path:
+                import subprocess
+                try:
+                    subprocess.run(
+                        [wakeonlan_path, "-i", broadcast_ip, mac],
+                        capture_output=True, timeout=5,
+                    )
+                    info_log(f"wakeonlan WOL 已发送至 {mac} -> {broadcast_ip}")
+                    return
+                except Exception as e:
+                    info_log(f"wakeonlan 执行失败，回退原始 UDP: {e}")
+
+            # 最终回退：原始 UDP 魔术包
+            magic = bytes.fromhex("FF" * 6 + mac_clean * 16)
+            try:
+                import socket
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+                s.settimeout(2)
+                s.sendto(magic, (broadcast_ip, 9))
+                s.sendto(magic, (broadcast_ip, 7))
+                s.close()
+                info_log(f"原始 UDP WOL 已发送至 {mac} -> {broadcast_ip}:9/7")
+            except Exception as e:
+                error_log(f"原始 UDP WOL 失败: {e}")
 
     def _get_help_text(self) -> str:
         return ("📋 **崩铁体力自动化 - 指令列表**\n\n"
