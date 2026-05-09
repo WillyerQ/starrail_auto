@@ -263,7 +263,7 @@ class StarRailAutoPlugin(Star):
         pc_username = self._get_config("pc_username", "")
         pc_password = self._get_config("pc_password", "")
         march7th_path = self._get_config("march7th_path", "")
-        ssh_port = int(self._get_config("ssh_port", 22))
+        ssh_port = self._get_config("ssh_port", 22)
 
         admin_id = None
         if event:
