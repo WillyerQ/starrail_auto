@@ -30,7 +30,8 @@ _handler = logging.FileHandler(
 _handler.setFormatter(logging.Formatter(
     "%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
 ))
-_file_logger.addHandler(_handler)
+if not _file_logger.handlers:
+    _file_logger.addHandler(_handler)
 _file_logger.propagate = False
 
 def debug_log(msg: str):
@@ -216,6 +217,13 @@ class StarRailAutoPlugin(Star):
 
     # ========== 执行清体力（WOL + SSH + 计划任务） ==========
 
+    @staticmethod
+    def _escape_win_cmd_arg(s: str) -> str:
+        """转义 Windows cmd.exe 参数中的特殊字符（防注入）"""
+        # schtasks /rp 用双引号包裹，内部的双引号需转义为 ""
+        # cmd.exe 中 % 要加倍为 %% 才不会展开
+        return s.replace("%", "%%").replace('"', '""')
+
     async def _execute_cleanup(self, event: Optional[AstrMessageEvent] = None):
         """执行清体力任务：WOL → SSH → 更新检查 → 跑任务 → 报错日志"""
         pc_ip = self._get_config("pc_ip", "")
@@ -223,7 +231,7 @@ class StarRailAutoPlugin(Star):
         pc_username = self._get_config("pc_username", "")
         pc_password = self._get_config("pc_password", "")
         march7th_path = self._get_config("march7th_path", "")
-        ssh_port = self._get_config("ssh_port", 22)
+        ssh_port = int(self._get_config("ssh_port", 22))
 
         admin_id = None
         if event:
@@ -287,9 +295,11 @@ class StarRailAutoPlugin(Star):
 
             # 5. 通过计划任务运行
             schtasks_name = "StarRailAutoTemp"
+            safe_password = self._escape_win_cmd_arg(pc_password)
+            safe_username = self._escape_win_cmd_arg(pc_username)
             cmds = [
                 f'schtasks /delete /tn "{schtasks_name}" /f 2>nul',
-                f'schtasks /create /tn "{schtasks_name}" /tr "{task_cmd}" /sc once /st 00:00 /ru "{pc_username}" /rp "{pc_password}" /rl HIGHEST /f',
+                f'schtasks /create /tn "{schtasks_name}" /tr "{task_cmd}" /sc once /st 00:00 /ru "{safe_username}" /rp "{safe_password}" /rl HIGHEST /f',
                 f'schtasks /run /tn "{schtasks_name}"',
             ]
             stdin, stdout, stderr = ssh.exec_command(" && ".join(cmds), timeout=20)
