@@ -23,6 +23,8 @@ _log_dir = os.path.join(_plugin_dir, "logs")
 os.makedirs(_log_dir, exist_ok=True)
 _file_logger = logging.getLogger("starrail_auto")
 _file_logger.setLevel(logging.DEBUG)
+# 清除旧 handler，避免热重载重复添加
+_file_logger.handlers.clear()
 _handler = logging.FileHandler(
     os.path.join(_log_dir, f"starrail_{datetime.now().strftime('%Y%m%d')}.log"),
     encoding="utf-8"
@@ -30,8 +32,7 @@ _handler = logging.FileHandler(
 _handler.setFormatter(logging.Formatter(
     "%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
 ))
-if not _file_logger.handlers:
-    _file_logger.addHandler(_handler)
+_file_logger.addHandler(_handler)
 _file_logger.propagate = False
 
 def debug_log(msg: str):
