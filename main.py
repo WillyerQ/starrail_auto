@@ -325,29 +325,24 @@ class StarRailAutoPlugin(Star):
             march7th_dir = march7th_path.rsplit("\\", 1)[0] if "\\" in march7th_path else march7th_path.rsplit("/", 1)[0]
             updater_path = march7th_dir + "\\March7th Updater.exe"
 
-            # 3. 先检查并运行更新
-            if event: info_log("🔄 检查三月七助手更新...")
+            # 3. 检查更新器是否存在（不运行 GUI 程序，锁屏下会卡住）
+            if event: info_log("🔍 检查更新器是否存在...")
             stdin, stdout, stderr = ssh.exec_command(
-                f'if exist "{updater_path}" ("{updater_path}" 2>&1) else (echo UPDATER_NOT_FOUND)',
-                timeout=120
+                f'if exist "{updater_path}" (echo EXISTS) else (echo NOT_FOUND)',
+                timeout=10
             )
             try:
-                # 等待命令完成（带超时），再读输出
-                exit_status = stdout.channel.recv_exit_status(timeout=120)
-                update_output = stdout.read().decode("utf-8", errors="ignore")
-                stderr_text = stderr.read().decode("utf-8", errors="ignore")
-                if stderr_text:
-                    update_output += "\n" + stderr_text
+                exit_status = stdout.channel.recv_exit_status(timeout=10)
+                check_result = stdout.read().decode("utf-8", errors="ignore").strip()
             except Exception:
-                # 超时则强制关闭通道
-                info_log("⏰ 更新检查超时，跳过更新")
-                update_output = "UPDATER_TIMEOUT"
+                check_result = "TIMEOUT"
                 stdout.channel.close()
+                stderr.channel.close()
 
-            if "UPDATER_NOT_FOUND" in update_output:
-                if event: info_log("⚠️ 未找到更新程序，跳过更新")
+            if check_result == "EXISTS":
+                if event: info_log("ℹ️ 更新器存在（锁屏下跳过运行，在主任务中自动更新）")
             else:
-                if event: info_log("✅ 更新检查完成")
+                if event: info_log("ℹ️ 未找到独立更新器，跳过")
 
             # 4. 构建任务命令
             selected_tasks = self._get_config("selected_tasks", ["main"])
