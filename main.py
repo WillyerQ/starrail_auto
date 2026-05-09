@@ -6,6 +6,7 @@ SSH 运行三月七助手清体力，每日自动重置。
 兼容 WOL 唤醒后处于登录界面的场景，无需设置自动登录。
 """
 import asyncio
+import json
 import os
 import paramiko
 import logging
@@ -117,6 +118,28 @@ class StarRailAutoPlugin(Star):
         self.last_update_time = None
         self.trigger_time = None
         yield event.plain_result("体力数据已重置，请用 /体力设置 <数值> 设置初始值")
+
+    @filter.command("体力配置")
+    async def handle_config(self, event: AstrMessageEvent):
+        """设置配置项：/体力配置 <key>=<value>"""
+        msg = (event.message_str or "").strip()
+        parts = msg.split(maxsplit=2)
+        if len(parts) < 2:
+            yield event.plain_result(
+                "用法：/体力配置 <key>=<value>\n"
+                "示例：/体力配置 pc_ip=192.168.1.100\n"
+                "      /体力配置 pc_mac=AA:BB:CC:DD:EE:FF\n"
+                "      /体力配置 wol_method=ssh\n"
+                "当前配置保存在插件目录 config.json"
+            )
+            return
+        pair = parts[1]
+        if "=" not in pair:
+            yield event.plain_result("格式错误，请用 key=value 格式")
+            return
+        key, value = pair.split("=", 1)
+        self._save_local_config({key.strip(): value.strip()})
+        yield event.plain_result(f"✅ 已保存: {key.strip()} = {value.strip()}")
 
     @filter.command("体力帮助")
     async def handle_help(self, event: AstrMessageEvent):
@@ -435,11 +458,48 @@ class StarRailAutoPlugin(Star):
 
     # ========== 工具方法 ==========
 
-    def _get_config(self, key: str, default=None):
+    def _config_path(self) -> str:
+        """本地配置文件路径"""
+        return os.path.join(_plugin_dir, "config.json")
+
+    def _load_local_config(self) -> dict:
+        """从本地 JSON 文件加载配置"""
+        path = self._config_path()
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                warn_log(f"读取本地配置失败: {e}")
+        return {}
+
+    def _save_local_config(self, cfg: dict):
+        """保存配置到本地 JSON 文件"""
+        path = self._config_path()
         try:
-            return self.context.get_config(key) or default
+            # 合并现有配置
+            existing = self._load_local_config()
+            existing.update(cfg)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+            info_log(f"配置已保存到 {path}")
+        except Exception as e:
+            error_log(f"保存配置失败: {e}")
+
+    def _get_config(self, key: str, default=None):
+        """获取配置：优先从 WebUI 数据库，其次从本地 JSON"""
+        # 先查本地 JSON
+        local = self._load_local_config()
+        if key in local:
+            return local[key]
+        # 再查 WebUI
+        try:
+            val = self.context.get_config(key)
+            if val is not None:
+                return val
         except Exception:
-            return default
+            pass
+        return default
 
     @staticmethod
     async def _send_wol(mac: str, broadcast_ip: str = "192.168.1.255",
