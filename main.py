@@ -56,7 +56,7 @@ def error_log(msg: str):
 CST = timezone(timedelta(hours=8))
 
 
-@register("starrail_auto", "AstrBot", "崩铁体力自动化管理", "1.0.0")
+@register("starrail_auto", "AstrBot", "崩铁体力自动化管理", "1.2.0")
 class StarRailAutoPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
