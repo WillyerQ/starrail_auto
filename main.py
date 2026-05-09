@@ -382,43 +382,41 @@ class StarRailAutoPlugin(Star):
             safe_password = self._escape_win_cmd_arg(pc_password)
             safe_username = self._escape_win_cmd_arg(pc_username)
 
-            # 先清理旧任务（失败也无所谓）
-            ssh.exec_command(
+            # 两步法：先创建交互式任务(/it)，再绑定用户(/change)
+            # 这样 GUI 程序（March7th Launcher）才能在用户桌面显示
+            cmds = " & ".join([
+                # 1. 删除旧任务（失败忽略）
                 f'schtasks /delete /tn "{schtasks_name}" /f 2>nul',
-                timeout=10
-            )
-
-            # 创建新任务
-            stdin, stdout, stderr = ssh.exec_command(
+                # 2. 创建交互式任务
                 f'schtasks /create /tn "{schtasks_name}" /tr "{task_cmd}" '
-                f'/sc once /st 00:00 /ru "{safe_username}" /rp "{safe_password}" /rl HIGHEST /f',
-                timeout=20
-            )
-            create_ok = stdout.channel.recv_exit_status()
-            stderr_text = stderr.read().decode("utf-8", errors="ignore")[:500]
-
-            if create_ok != 0:
-                info_log(f"❌ 计划任务创建失败 (exit={create_ok}): {stderr_text}")
-                info_log("💡 可能原因：用户名/密码错误, 权限不足, 三月七路径不存在")
-                ssh.close()
-                if event:
-                    yield event.plain_result(
-                        "❌ 计划任务创建失败, 请检查配置\n> " + str(stderr_text[:200])
-                    )
-                return
-
-            info_log("✅ 计划任务创建成功, 正在运行...")
-
-            # 运行任务
-            stdin, stdout, stderr = ssh.exec_command(
-                f'schtasks /run /tn "{schtasks_name}"', timeout=20
-            )
-            run_ok = stdout.channel.recv_exit_status()
+                f'/sc once /st 23:59 /it /f',
+                # 3. 绑定到指定用户
+                f'schtasks /change /tn "{schtasks_name}" '
+                f'/ru "{safe_username}" /rp "{safe_password}"',
+                # 4. 立即运行
+                f'schtasks /run /tn "{schtasks_name}"',
+            ])
+            stdin, stdout, stderr = ssh.exec_command(cmds, timeout=30)
+            raw_out = stdout.read()
+            raw_err = stderr.read()[:500]
             ssh.close()
 
-            if run_ok != 0:
-                err = stderr.read().decode("utf-8", errors="ignore")[:300]
-                info_log(f"⚠️ 计划任务运行异常: {err}")
+            # Windows 输出是 GBK 编码
+            try:
+                result = raw_out.decode("gbk", errors="ignore")
+                err_text = raw_err.decode("gbk", errors="ignore")
+            except Exception:
+                result = raw_out.decode("utf-8", errors="ignore")
+                err_text = raw_err.decode("utf-8", errors="ignore")
+
+            if "成功" in result:
+                info_log("✅ 计划任务创建成功, 正在运行...")
+            else:
+                info_log(f"❌ 计划任务失败: {err_text or result[:200]}")
+                info_log("💡 可能原因：用户名错误, 权限不足")
+                if event:
+                    yield event.plain_result("❌ 计划任务创建失败, 请检查配置")
+                return
 
             # 6. 轮询等待完成
             info_log("⏳ 等待任务完成...")
