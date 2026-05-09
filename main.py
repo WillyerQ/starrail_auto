@@ -487,16 +487,16 @@ class StarRailAutoPlugin(Star):
             error_log(f"保存配置失败: {e}")
 
     def _get_config(self, key: str, default=None):
-        """获取配置：优先从 WebUI 数据库，其次从本地 JSON"""
-        # 先查本地 JSON
+        """获取配置：优先从本地 JSON，其次从 WebUI"""
         local = self._load_local_config()
         if key in local:
             return local[key]
-        # 再查 WebUI
         try:
             val = self.context.get_config(key)
-            if val is not None:
+            if isinstance(val, (str, int, float, bool, list, dict)):
                 return val
+            if val is None:
+                return default
         except Exception:
             pass
         return default
