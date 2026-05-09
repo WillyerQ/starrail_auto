@@ -19,7 +19,7 @@
 **前置条件：**
 - AstrBot v4.16+
 - 目标 PC：Windows 10/11，开启 OpenSSH Server
-- 目标 PC：支持 WOL，**需设置自动登录**（netplwiz）
+- 目标 PC：支持 WOL
 - 目标 PC：安装 [三月七助手](https://github.com/moesnow/March7thAssistant) + 崩坏星穹铁道
 
 **步骤：**
