@@ -40,15 +40,15 @@ def debug_log(msg: str):
 
 def info_log(msg: str):
     _file_logger.info(msg)
-    info_log(f"[starrail-auto] {msg}")
+    logger.info(f"[starrail-auto] {msg}")
 
 def warn_log(msg: str):
     _file_logger.warning(msg)
-    warn_log(f"[starrail-auto] {msg}")
+    logger.warning(f"[starrail-auto] {msg}")
 
 def error_log(msg: str):
     _file_logger.error(msg)
-    error_log(f"[starrail-auto] {msg}")
+    logger.error(f"[starrail-auto] {msg}")
 # ======
 
 # 时区
